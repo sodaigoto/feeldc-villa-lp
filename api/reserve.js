@@ -1,0 +1,65 @@
+// FEEL℃ VILLA - 見学予約フォーム送信API（Resend連携 + CORS対応）
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    return res.status(200).set(CORS_HEADERS).end();
+  }
+  if (req.method !== 'POST') {
+    return res.status(405).set(CORS_HEADERS).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { name, email, tel, date1, date2, message, website } = req.body || {};
+    if (website) return res.status(200).set(CORS_HEADERS).json({ ok: true }); // bot除け
+    if (!name || !email || !date1) {
+      return res.status(400).set(CORS_HEADERS).json({ error: 'Required fields missing' });
+    }
+
+    const to = process.env.TO_EMAIL || 'info@feeldo.co.jp';
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) {
+      return res.status(500).set(CORS_HEADERS).json({ error: 'Missing RESEND_API_KEY' });
+    }
+
+    // ドメイン認証が済むまではResend標準ドメインを使用
+    const payload = {
+      from: 'FEEL℃ VILLA <onboarding@resend.dev>',
+      to: [to],
+      subject: `【見学予約】${name} 様`,
+      html: `
+        <p>お名前: ${name}</p>
+        <p>メール: ${email}</p>
+        <p>電話: ${tel || '-'}</p>
+        <p>第1希望日時: ${date1}</p>
+        <p>第2希望日時: ${date2 || '-'}</p>
+        <p>ご要望・ご質問:</p>
+        <pre style="white-space:pre-wrap">${message || ''}</pre>
+        <hr/>
+        <p>送信元: FEEL℃ VILLA LP</p>
+      `,
+    };
+
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!r.ok) {
+      const text = await r.text();
+      return res.status(502).set(CORS_HEADERS).json({ error: 'Email API error', detail: text });
+    }
+    return res.status(200).set(CORS_HEADERS).json({ ok: true });
+  } catch (e) {
+    return res.status(500).set(CORS_HEADERS).json({ error: 'Server error', detail: String(e) });
+  }
+}
