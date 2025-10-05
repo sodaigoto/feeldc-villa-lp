@@ -1,4 +1,5 @@
-// ←先頭付近に追記
+// FEEL℃ VILLA - 見学予約フォーム送信API（Resend連携 + CORS対応）
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -6,17 +7,18 @@ const CORS_HEADERS = {
 };
 
 export default async function handler(req, res) {
+  // CORSプリフライト対応
   if (req.method === 'OPTIONS') {
-    // プリフライトに200で応答
     return res.status(200).set(CORS_HEADERS).end();
   }
+
   if (req.method !== 'POST') {
     return res.status(405).set(CORS_HEADERS).json({ error: 'Method not allowed' });
   }
 
   try {
     const { name, email, tel, date1, date2, message, website } = req.body || {};
-    if (website) return res.status(200).set(CORS_HEADERS).json({ ok: true }); // ハニーポット
+    if (website) return res.status(200).set(CORS_HEADERS).json({ ok: true }); // bot除け
     if (!name || !email || !date1) {
       return res.status(400).set(CORS_HEADERS).json({ error: 'Required fields missing' });
     }
@@ -27,8 +29,8 @@ export default async function handler(req, res) {
       return res.status(500).set(CORS_HEADERS).json({ error: 'Missing RESEND_API_KEY' });
     }
 
+    // 認証完了までResend標準ドメインから送信
     const payload = {
-      // 認証が済むまではResend標準ドメインで送る
       from: 'FEEL℃ VILLA <onboarding@resend.dev>',
       to: [to],
       subject: `【見学予約】${name} 様`,
@@ -45,6 +47,7 @@ export default async function handler(req, res) {
       `,
     };
 
+    // Resend API送信
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -58,6 +61,7 @@ export default async function handler(req, res) {
       const text = await r.text();
       return res.status(502).set(CORS_HEADERS).json({ error: 'Email API error', detail: text });
     }
+
     return res.status(200).set(CORS_HEADERS).json({ ok: true });
   } catch (e) {
     return res.status(500).set(CORS_HEADERS).json({ error: 'Server error', detail: String(e) });
