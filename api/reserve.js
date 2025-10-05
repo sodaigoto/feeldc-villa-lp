@@ -1,32 +1,45 @@
-const CORS_HEADERS = {
+// FEEL℃ VILLA - 見学予約フォーム送信API（Vercel Node環境対応）
+
+const HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
 module.exports = async (req, res) => {
+  // プリフライト
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200, HEADERS);
+    return res.end();
+  }
+
+  if (req.method !== 'POST') {
+    res.writeHead(405, HEADERS);
+    return res.end(JSON.stringify({ error: 'Method not allowed' }));
+  }
+
   try {
-    if (req.method === 'OPTIONS') {
-      return res.status(200).set(CORS_HEADERS).end();
-    }
-    if (req.method !== 'POST') {
-      return res.status(405).set(CORS_HEADERS).json({ error: 'Method not allowed' });
+    const { name, email, tel, date1, date2, message, website } = req.body || {};
+    if (website) {
+      res.writeHead(200, HEADERS);
+      return res.end(JSON.stringify({ ok: true }));
     }
 
-    const { name, email, tel, date1, date2, message, website } = req.body || {};
-    if (website) return res.status(200).set(CORS_HEADERS).json({ ok: true });
     if (!name || !email || !date1) {
-      return res.status(400).set(CORS_HEADERS).json({ error: 'Required fields missing' });
+      res.writeHead(400, HEADERS);
+      return res.end(JSON.stringify({ error: 'Required fields missing' }));
     }
 
     const to = process.env.TO_EMAIL || 'info@feeldo.co.jp';
     const resendKey = process.env.RESEND_API_KEY;
     if (!resendKey) {
-      return res.status(500).set(CORS_HEADERS).json({ error: 'Missing RESEND_API_KEY' });
+      res.writeHead(500, HEADERS);
+      return res.end(JSON.stringify({ error: 'Missing RESEND_API_KEY' }));
     }
 
+    // Resend API 呼び出し
     const payload = {
-      from: 'FEEL℃ VILLA <onboarding@resend.dev>', // 認証前はResend標準ドメイン
+      from: 'FEEL℃ VILLA <onboarding@resend.dev>',
       to: [to],
       subject: `【見学予約】${name} 様`,
       html: `
@@ -44,17 +57,24 @@ module.exports = async (req, res) => {
 
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(payload),
     });
 
     if (!r.ok) {
       const text = await r.text();
-      return res.status(502).set(CORS_HEADERS).json({ error: 'Email API error', detail: text });
+      res.writeHead(502, HEADERS);
+      return res.end(JSON.stringify({ error: 'Email API error', detail: text }));
     }
-    return res.status(200).set(CORS_HEADERS).json({ ok: true });
+
+    res.writeHead(200, HEADERS);
+    return res.end(JSON.stringify({ ok: true }));
   } catch (e) {
-    try { console.error('reserve.js error:', e); } catch {}
-    return res.status(500).set(CORS_HEADERS).json({ error: 'Server error', detail: String(e) });
+    console.error('reserve.js error:', e);
+    res.writeHead(500, HEADERS);
+    return res.end(JSON.stringify({ error: 'Server error', detail: String(e) }));
   }
 };
